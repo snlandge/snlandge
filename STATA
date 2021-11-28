@@ -1,0 +1,229 @@
+***************************************************
+*   ECONOMICS 82400 APPLIED MACROECONOMETRICS     *
+*               TERM PAPER                        *
+*             Swapnil Landge                      *
+***************************************************
+
+clear all
+set more off	
+import excel "C:\Users\snlan\OneDrive\Documents\Swapnil\CUNY\Semester\Fall 2021\Applied Macro\Paper\Data\Book2.xlsx", sheet("Sheet1") firstrow
+generate time=q(1986q1)+_n-1
+format time %tq
+tsset time
+sort time
+gen lgdp=log(gdp)
+gen lpi=log(pi)
+gen lpd=log(pd)
+
+
+
+
+********************Time series Graphs**************************
+tsline lpd,name(pd)
+tsline lgdp,name(gdp)
+tsline lpi,name(pi)
+tsline r10,name(r10)
+
+graph combine pd gdp pi r10,col(2) row(2)
+
+******************choosing the optimal lag for each variable****
+
+/*Used the Sequential t statistical approch to slect the lag, since its a quarterly data, i started with lag 8 and found the following lags
+ r10--> 1 lags   code :--> dfuller r10, trend regress lags(5)
+ gdp--> 2 lag
+ pd --> 4 lag
+ pi --> 2 lag   */
+ 
+ ***************Unit root test*********************************
+ *ADF test*
+dfuller lpd, trend regress lags(4)      /* H0:- pd is non stationary Ha:- trend stationary acKinnon approximate p-value for Z(t) = 0.2400 , Hence we can't reject the null therefore its non stationary (having unit root)*/
+pperron lpd, lags(4) trend regress
+ 
+ 
+dfuller lgdp, trend regress lags(2)    /* H0:- pd is non stationary Ha:- trend stationary acKinnon approximate p-value for Z(t) =   0.7718 , Hence we can't reject the null therefore its non stationary (having unit root)*/
+ pperron lgdp, lags(2) regress         /*Withour trens , constant is significant, hence i will consider the model with constant*/
+
+
+ dfuller lpi, trend regress lags(2)  /*Including trend gives me signifant cosnt and trend*//* H0:- pd is non stationary Ha:- meanzero stationary test statistic is greater than critical vlaue , Hence we reject the null therefore its meanzero stationary stationary (having unit root)*/
+ pperron lpi, lags(2) trend regress
+
+
+ dfuller r10, regress lags(3)     /* H0:- pd is non stationary Ha:- trend stationary acKinnon approximate p-value for Z(t) =  0.6547 , Hence we can't reject the null therefore its non stationary (having unit root)*/
+ pperron r10, lags(3) regress
+ *Phillips perron unit root test*
+ 
+                 /* H0:- pd is non stationary Ha:- trend stationary acKinnon approximate p-value for Z(t) =  0.9932 , Hence we can't reject the null therefore its non stationary (having unit root)*/
+  
+  pperron gdp, lags(2) trend regress  /* H0:- pd is non stationary Ha:- trend stationary acKinnon approximate p-value for Z(t) =  0.9932 , Hence we can't reject the null therefore its non stationary (having unit root)*/
+  pperron r10, lags(5) trend regress /* H0:- pd is non stationary Ha:- trend stationary acKinnon approximate p-value for Z(t) =  0.3365 , Hence we can't reject the null therefore its non stationary (having unit root)*/
+ 
+ 
+ *********HP filter***
+ 
+ 
+hprescott lgdp,stub(HP)      /*HP prescott*/
+twoway (line lgdp HP_lgdp_1 HP_lgdp_sm_1 time)
+tsline HP_lgdp_1,name(hpdg1)
+ 
+ 
+hprescott r10,stub(HP)      /*HP prescott*/
+twoway (line r10 HP_r10_1 HP_r10_sm_1 time)
+tsline HP_r10_1,name(hpr10)
+
+hprescott lpd,stub(HP)      /*HP prescott*/
+twoway (line lpd HP_lpd_1 HP_lpd_sm_1 time)
+tsline HP_lpd_1,name(hppd)
+
+hprescott lpi,stub(HP)      /*HP prescott*/
+twoway (line lpi HP_lpi_1 HP_lpi_sm_1 time)
+tsline HP_lpi_1,name(hppi)
+
+graph combine hpdg1 hppi hppd hpr10 ,col(2) row(2)
+
+
+**********check for the structure break***
+
+/*I used Eview to test multiple structure break to make sure my unit root test is correct equation in Eview :--ls r10 c r10(-1) then view stability dignosis.
+mostly i found 1 struture break but PI has 2 structure break  therefore I used Zivot andrew test to verify the unit root*/
+
+zandrews lpd,break(both) graph    /* This test confirmed the unit rrot with struture break with trend, without with both*/
+zandrews lgdp,break(both) graph   /* This test confirmed the unit rrot with struture break with trend, without with both*/
+zandrews lpi,break(both) graph    /* This test confirmed the unit rrot with struture break with trend, without with both*/
+zandrews r10,break(both) graph    /* This test confirmed the unit rrot with struture break with trend, without with both*/
+
+************order of integration******************
+dfuller D.lpd, regress   /*I(1)*/
+tsline D.lpd 
+
+dfuller D.gdp,  regress 
+tsline D.gdp             /*I(1)*/
+
+dfuller D.lpi,  regress
+tsline D.lpi 
+
+dfuller D.r10,  regress
+tsline D.r10
+
+
+ ***Lag selection for to check cointegration relationship and ll use in VECM **
+ 
+ varsoc lpd r10 lgdp lpi, maxlag(15)  /*AIC select lag 5*/
+ 
+ 
+ ****Cointergation relationship (rank) Johansen tests for cointegration****
+ 
+ vecrank lpd r10 lgdp lpi, trend(constant) lags(4) max  /*Both trace and max suggest there is 2 CI relationship*/
+ 
+ 
+ ****Vector error correction model***
+constraint define 1 [_ce1]lgdp=1
+constraint define 2 [_ce1]r10=0
+constraint define 3 [_ce2]r10=1
+constraint define 4 [_ce2]lgdp=0
+constraint define 5 [_ce2]lpi=0
+
+ vec r10 lgdp lpd  lpi, trend(constant) lags(4)  rank(2)  bconstraints(1 2 3 4)   /*cointegration equation is written as r10+(-512.1219)lgdp+41 lpd+329lpi+1970.8=0*/
+
+ /*after i use lag 5 , i got the autocporrelation in residual via veclmar, mlag(5) therefore i go back and change the lag to 6 in VEC model to correct the model specificationa, for lag 6 i didnot find any 
+ residual autocorrelation*/
+ 
+ 
+ 
+  
+  predict ce1, ce equ(#1)
+  tsline ce1
+  
+  
+  predict ce2, ce equ(#2)
+  tsline ce2
+  
+  veclmar, mlag(7)    /*checking for thr autocorrelation in the residual*/
+  
+  *normally distributed.*
+  
+   vecnorm, jbera skewness kurtosis  /* we test the null hypothesis that the errors are normally distributed.In the Jarque and Bera (1980) test, we reject null.In the Skewness Test we reject the null for all but r10*/
+   
+   /*the stability test to check whether we have correctly specified the number of cointegrating equations*/
+   
+    vecstable, graph  /*The graph of the eigenvalues shows that none of the remaining eigenvalues appears close to the unit circle. The stability check does not indicate that our model is mis-specified*/
+
+ *Testing Granger causality in VAR*
+ 
+ 
+ 
+ ***IRF****
+ 
+ irf create vec1, set(vecintro, replace) step(24)
+ 
+  irf graph oirf, impulse(lpd) response(r10 lpi lgdp lpd) yline(0)
+  
+   irf graph oirf, impulse(lgdp) response(r10 lpi lgdp lpd) yline(0)
+  
+****Forecast***
+
+ fcast compute m1_, step(24)
+
+fcast graph m1_r10 m1_lgdp m1_lpi m1_lpd
+
+
+
+
+
+******Threshold ************
+reg lgdp lpd lpi 
+predict res1,residual
+egranger lgdp lpd lpi,lag(4)
+reg r10 lpd lpi 	
+predict res2, residual
+egranger r10 lpd lpi ,lag(4)
+
+
+regress D.res1 L.res1 L(1/4)D.res1, nocons
+
+regress D.r10 l.res1 l.res2  l(1/3).D.lgdp l(1/3).D.pd l(1/3).D.pi l(1/3).D.r10
+
+regress D.lgdp l.res1 l.res2  l(1/3).D.lgdp l(1/3).D.pd l(1/3).D.pi l(1/3).D.r10
+
+ regress D.pd l.res1 l.res2  l(1/3).D.lgdp l(1/3).D.pd l(1/3).D.pi l(1/3).D.r10 
+ 
+ regress D.pi l.res1 l.res2  l(1/3).D.lgdp l(1/3).D.pd l(1/3).D.pi l(1/3).D.r10 
+ 
+
+gen tseries1 = L.res1
+gen tplus1  = (tseries>=0)*L.res1
+gen tminus1 = (tseries<0)*L.res1
+
+
+gen tseries2= L.res2
+gen tplus2  = (tseries>=0)*L.res2
+gen tminus2 = (tseries<0)*L.res2
+
+regress D.r10 tplus1 tminus1 tplus2 tminus2 l(1/3).D.lgdp l(1/3).D.pd l(1/3).D.pi l(1/3).D.r10
+predict r_10
+graph twoway (tsline L.r10)(tsline res1) (tsline res2), title(TAR model(with Threshold=0)) 
+
+regress D.lgdp tplus1 tminus1 tplus2 tminus2 l(1/3).D.lgdp l(1/3).D.pd l(1/3).D.pi l(1/3).D.r10
+regress D.pd tplus1 tminus1 tplus2 tminus2 l(1/3).D.lgdp l(1/3).D.pd l(1/3).D.pi l(1/3).D.r10
+regress D.pi tplus1 tminus1 tplus2 tminus2 l(1/3).D.lgdp l(1/3).D.pd l(1/3).D.pi l(1/3).D.r10
+
+
+
+******************Factor analysis****************
+factor r10 lpd lpi lgdp
+predict f2
+estat kmo
+screeplot,mean
+
+****Dynamic model**
+
+dfactor(D.(lgdp r10 lpd lpi)=,noconstant ar(1) )(f=,ar(1/2))
+tsappend,add(8)
+predict Dpd,dynamic(tq(2020q1)) equation(D.lpd)
+tsline D.lpd Dpd if time<=tq(2020q1)
+
+predict Dr10,dynamic(tq(2020q1)) equation(D.r10)
+tsline D.r10 Dr10 if time<=tq(2020q1)
+***predicting unobsereved factor**
+predict fac if e(sample),factor
+tsline D.lpd fac if time<=tq(2020q1)
+tsline D.r10 fac if time<=tq(2020q1)
